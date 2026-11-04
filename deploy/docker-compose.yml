@@ -10,7 +10,7 @@
 services:
   mep-jobs-api:
     build:
-      context: https://github.com/REPLACE_OWNER/REPLACE_REPO.git#main:service
+      context: https://github.com/bhartisandip/mep-jobs.git#main:service
     image: mep-jobs-api:latest
     container_name: mep-jobs-api
     restart: always
