@@ -77,6 +77,43 @@ export function parseJobCards(html) {
   return jobs;
 }
 
+// Public job detail page (logged out). Returns only what is on the page; missing items are null.
+const DETAIL_ENDPOINT = 'https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/';
+
+function blockText(html) {
+  return decode(String(html || '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '\n- ')
+    .replace(/<\/(p|li|ul|ol|div|h\d)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' '))
+    .replace(/[ \t ]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/\n+(?=- )/g, '\n')
+    .trim();
+}
+
+export function parseJobDetail(html) {
+  const h = String(html);
+  const descHtml = pick(h, /show-more-less-html__markup[^>]*>([\s\S]*?)<\/div>/i);
+  const criteria = {};
+  for (const m of h.matchAll(/description__job-criteria-subheader[^>]*>([\s\S]*?)<\/h3>[\s\S]*?description__job-criteria-text[^>]*>([\s\S]*?)<\/span>/gi)) {
+    criteria[text(m[1]).toLowerCase()] = text(m[2]) || null;
+  }
+  const logoRaw = pick(h, /(https:\/\/media\.licdn\.com\/dms\/image\/[^"'\s]*company-logo[^"'\s]*)/i);
+  const applicants = text(pick(h, /num-applicants__caption[^>]*>([\s\S]*?)<\/(?:figcaption|span)>/i)) || null;
+  return {
+    logo_url: logoRaw ? decode(logoRaw) : null,
+    seniority: criteria['seniority level'] ?? null,
+    employment_type: criteria['employment type'] ?? null,
+    job_function: criteria['job function'] ?? null,
+    industries: criteria['industries'] ?? null,
+    applicants,
+    description_text: descHtml ? blockText(descHtml).slice(0, 20000) : null,
+  };
+}
+
 export function buildSearchUrl({ keywords, location, datePosted = 'any', start = 0 }) {
   const u = new URL(ENDPOINT);
   u.searchParams.set('keywords', keywords);
@@ -162,5 +199,28 @@ export function createLinkedInClient(config, { fetchImpl = globalThis.fetch, sle
     return { jobs: out, hasMore: !exhausted, pagesFetched: pages };
   }
 
-  return { search, fetchPage };
+  async function fetchDetail(id) {
+    if (!/^\d{5,20}$/.test(String(id))) throw new UpstreamError('Invalid LinkedIn job id', { status: 400, retryable: false });
+    return throttled(async () => {
+      let res;
+      try {
+        res = await fetchImpl(DETAIL_ENDPOINT + id, {
+          headers: { 'user-agent': config.userAgent, accept: 'text/html', 'accept-language': 'en-US,en;q=0.9' },
+          redirect: 'manual',
+          signal: AbortSignal.timeout(config.linkedinTimeoutMs),
+        });
+      } catch (e) {
+        const timeout = e?.name === 'TimeoutError' || e?.name === 'AbortError';
+        throw new UpstreamError(timeout ? 'LinkedIn request timed out' : 'LinkedIn request failed', { status: timeout ? 504 : 502 });
+      }
+      log('linkedin_detail', { id, status: res.status });
+      if (res.status === 429) throw new UpstreamError('LinkedIn rate limit reached (HTTP 429)', { status: 503, upstreamStatus: 429 });
+      if (res.status === 404 || res.status === 410) throw new UpstreamError('Job is no longer on LinkedIn', { status: 404, retryable: false, upstreamStatus: res.status });
+      if (res.status >= 300 && res.status < 400) throw new UpstreamError('LinkedIn redirected the job page (possible login wall)', { status: 502, upstreamStatus: res.status });
+      if (!res.ok) throw new UpstreamError(`LinkedIn returned HTTP ${res.status}`, { status: 502, upstreamStatus: res.status });
+      return parseJobDetail(await res.text());
+    });
+  }
+
+  return { search, fetchPage, fetchDetail };
 }

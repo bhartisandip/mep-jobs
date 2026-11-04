@@ -147,3 +147,24 @@ test('expiry hides old jobs from pending and blocks claims', () => {
   assert.equal(s.expire(7), 1);
   assert.throws(() => s.claim('4001'), { name: 'ConflictError' });
 });
+
+import { parseJobDetail } from '../src/linkedin.js';
+test('parses the public job detail page', () => {
+  const html = `<img data-delayed-url="https://media.licdn.com/dms/image/v2/X/company-logo_100_100/a?e=2147483647&amp;v=beta&amp;t=abc" />
+    <figcaption class="num-applicants__caption">Be among the first 25 applicants</figcaption>
+    <div class="show-more-less-html__markup">Intro &amp; context<br><ul><li>Heat load calcs</li><li>P&amp;IDs</li></ul><p>B.Tech, 5-8 years</p></div>
+    <li><h3 class="description__job-criteria-subheader">Seniority level</h3><span class="description__job-criteria-text">Mid-Senior level</span></li>
+    <li><h3 class="description__job-criteria-subheader">Employment type</h3><span class="description__job-criteria-text">Full-time</span></li>
+    <li><h3 class="description__job-criteria-subheader">Industries</h3><span class="description__job-criteria-text">Construction</span></li>`;
+  const d = parseJobDetail(html);
+  assert.equal(d.logo_url, 'https://media.licdn.com/dms/image/v2/X/company-logo_100_100/a?e=2147483647&v=beta&t=abc');
+  assert.equal(d.seniority, 'Mid-Senior level');
+  assert.equal(d.employment_type, 'Full-time');
+  assert.equal(d.industries, 'Construction');
+  assert.equal(d.job_function, null, 'missing criteria stay null');
+  assert.equal(d.applicants, 'Be among the first 25 applicants');
+  assert.match(d.description_text, /Intro & context\n+- Heat load calcs\n- P&IDs/);
+  assert.match(d.description_text, /B\.Tech, 5-8 years/);
+  const empty = parseJobDetail('<html></html>');
+  assert.deepEqual(empty, { logo_url: null, seniority: null, employment_type: null, job_function: null, industries: null, applicants: null, description_text: null });
+});

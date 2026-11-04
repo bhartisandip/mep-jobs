@@ -11,7 +11,9 @@ const config = {
 };
 const today = new Date().toISOString().slice(0, 10);
 let mode = 'ok';
+let detailCalls = 0;
 const linkedin = {
+  async fetchDetail(id) { detailCalls++; return { logo_url: 'https://media.licdn.com/x/company-logo_100_100/y', seniority: 'Associate', employment_type: 'Full-time', job_function: null, industries: 'Construction', applicants: 'Over 100 applicants', description_text: 'Design HVAC systems. 3-5 years.' }; },
   async search({ keywords }) {
     if (mode === 'down') throw new UpstreamError('LinkedIn returned HTTP 500');
     const base = keywords.startsWith('Plumbing') ? 50000 : 60000;
@@ -106,4 +108,18 @@ test('upstream failure gives a 502 the workflow can catch', async () => {
   mode = 'ok';
   assert.equal(r.status, 502);
   assert.equal(r.json.error.code, 'upstream_failed');
+});
+
+test('details are fetched once and cached', async () => {
+  const r1 = await call('/api/v1/jobs/50001/details', { method: 'POST' });
+  assert.equal(r1.status, 200);
+  assert.equal(r1.json.cached, false);
+  assert.equal(r1.json.details.industries, 'Construction');
+  assert.match(r1.json.details.description_text, /HVAC/);
+  const r2 = await call('/api/v1/jobs/50001/details', { method: 'POST' });
+  assert.equal(r2.json.cached, true);
+  assert.equal(detailCalls, 1, 'second call served from the database');
+  const r3 = await call('/api/v1/jobs/50001/details', { method: 'POST', body: { force: true } });
+  assert.equal(r3.json.cached, false);
+  assert.equal((await call('/api/v1/jobs/99999/details', { method: 'POST' })).status, 404);
 });

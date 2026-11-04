@@ -66,6 +66,12 @@ export function openDb(path, { now = () => new Date() } = {}) {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  // Additive migrations (safe to re-run).
+  const have = new Set(db.prepare('PRAGMA table_info(jobs)').all().map((c) => c.name));
+  for (const [col, type] of [['logo_url', 'TEXT'], ['seniority', 'TEXT'], ['employment_type', 'TEXT'], ['job_function', 'TEXT'],
+    ['industries', 'TEXT'], ['applicants', 'TEXT'], ['description_text', 'TEXT'], ['details_fetched_at', 'TEXT']]) {
+    if (!have.has(col)) db.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${type}`);
+  }
 
   const iso = () => now().toISOString();
   const today = () => iso().slice(0, 10);
@@ -163,6 +169,15 @@ export function openDb(path, { now = () => new Date() } = {}) {
     return get(id);
   }
 
+  function saveDetails(id, d) {
+    get(id);
+    db.prepare(`UPDATE jobs SET logo_url = ?, seniority = ?, employment_type = ?, job_function = ?, industries = ?,
+        applicants = ?, description_text = ?, details_fetched_at = ? WHERE id = ?`)
+      .run(d.logo_url, d.seniority, d.employment_type, d.job_function, d.industries, d.applicants, d.description_text, iso(), String(id));
+    logEvent(id, 'details', d.description_text ? `${d.description_text.length} chars` : 'no description');
+    return get(id);
+  }
+
   function setShare(id, status) {
     get(id);
     db.prepare('UPDATE jobs SET share_status = ?, share_updated_at = ? WHERE id = ?').run(status, iso(), String(id));
@@ -224,6 +239,6 @@ export function openDb(path, { now = () => new Date() } = {}) {
     return file;
   }
 
-  return { db, get, upsertJobs, pending, claim, markPublished, markFailed, setShare, skip, expire, list, stats,
+  return { db, get, upsertJobs, pending, claim, markPublished, markFailed, setShare, saveDetails, skip, expire, list, stats,
     startRun, finishRun, events, logEvent, backup, close: () => db.close() };
 }

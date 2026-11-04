@@ -56,6 +56,12 @@ const storedJob = (j) => ({
   ...publicJob(j), discipline: j.discipline, status: j.status, attempts: j.attempts, last_error: j.last_error,
   first_discovered_at: j.first_discovered_at, last_checked_at: j.last_checked_at, published_at: j.published_at,
   mepmate_job_id: j.mepmate_job_id, mepmate_url: j.mepmate_url, share_status: j.share_status, expired_at: j.expired_at,
+  logo_url: j.logo_url ?? null, details_fetched_at: j.details_fetched_at ?? null,
+});
+const detailsOf = (j) => ({
+  logo_url: j.logo_url ?? null, seniority: j.seniority ?? null, employment_type: j.employment_type ?? null,
+  job_function: j.job_function ?? null, industries: j.industries ?? null, applicants: j.applicants ?? null,
+  description_text: j.description_text ?? null,
 });
 
 // ── request plumbing ──────────────────────────────────────────────────────
@@ -235,6 +241,12 @@ export function createApp({ config, store, linkedin, log = () => {} }) {
           const claimToken = str(body.claim_token, 'claim_token', { required: true, max: 64, pattern: /^[0-9a-f-]+$/ });
           const error = str(body.error, 'error', { required: true, max: 1000, pattern: null });
           return [200, { success: true, job: storedJob(store.markFailed(id, { claimToken, error })) }];
+        }
+        if (action === 'details') {
+          const row = store.get(id);
+          const fresh = row.details_fetched_at && Date.now() - Date.parse(row.details_fetched_at) < 24 * 3600 * 1000;
+          const updated = fresh && body.force !== true ? row : store.saveDetails(id, await linkedin.fetchDetail(id));
+          return [200, { success: true, cached: Boolean(fresh && body.force !== true), details: detailsOf(updated), job: storedJob(updated) }];
         }
         if (action === 'skip') {
           const reason = str(body.reason, 'reason', { max: 300, pattern: null });
