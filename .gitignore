@@ -5,3 +5,6 @@ node_modules/
 *.db-*
 .env
 backups/
+
+# mepmate.com site code (private): kept local, never pushed
+mepmate/

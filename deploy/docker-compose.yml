@@ -19,7 +19,7 @@ services:
     working_dir: /home/node
     environment:
       - APP_REPO=bhartisandip/mep-jobs
-      - APP_REF=a17e3e3c870149e2e2a71b8a2942ae881bb1d7ef
+      - APP_REF=84542944c40829a94dc41f5ae607e80a82ef4bac
       - API_KEY=${API_KEY}
       - PORT=3000
       - DB_PATH=/home/node/data/jobs.db
