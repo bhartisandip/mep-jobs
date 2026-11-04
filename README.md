@@ -126,7 +126,7 @@ API_KEY=<64 hex chars> DB_PATH=./jobs.db BACKUP_DIR=./backups npm start
 ## Deploy (Hostinger Docker Manager)
 
 1. The repo is public at https://github.com/bhartisandip/mep-jobs and contains no secrets.
-2. Create the project `mep-jobs` from that compose file, with the environment `API_KEY=<key>`.
+2. Create the project `mep-jobs` in Hostinger Docker Manager from `deploy/docker-compose.yml`, with the environment `API_KEY=<key>`. Hostinger does not build images, so the container uses `node:24-alpine` and downloads the commit pinned in `APP_REF` on first start. To update, push, set `APP_REF` to the new commit SHA and redeploy.
 3. Check that `https://jobs.srv2053249.hstgr.cloud/health` returns `{"status":"ok"}`.
 
 Logs: Hostinger Docker Manager → `mep-jobs` → logs, or `docker logs mep-jobs-api`. The output is JSON lines, one per request, with no keys or cookies.

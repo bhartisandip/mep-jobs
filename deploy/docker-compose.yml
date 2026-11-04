@@ -1,24 +1,29 @@
 # Hostinger Docker Manager project "mep-jobs".
-# Builds straight from the public GitHub repo (no secrets in the repo).
-# Secrets come from the project's environment (API_KEY), set in Hostinger, never committed.
 #
-# Joins the existing n8n_default network (like the waha and tmd-media projects), so:
+# Hostinger's Docker Manager does not build images, so this uses the official node image and, on first
+# start, downloads the pinned commit (APP_REF) of this public repo into the volume. Nothing is built.
+# To deploy a new version: push to GitHub, set APP_REF to the new commit SHA, redeploy.
+# The only secret (API_KEY) comes from the Hostinger project environment, never from git.
+#
+# Joins the existing n8n_default network (like the waha and tmd-media projects):
 #   - n8n calls it internally at http://mep-jobs-api:3000
 #   - the existing Traefik serves it at https://jobs.srv2053249.hstgr.cloud (wildcard DNS already resolves)
 # Nothing in the n8n project, Traefik config, DNS or firewall changes.
 
 services:
   mep-jobs-api:
-    build:
-      context: https://github.com/bhartisandip/mep-jobs.git#main:service
-    image: mep-jobs-api:latest
+    image: node:24-alpine
     container_name: mep-jobs-api
     restart: always
+    user: node
+    working_dir: /home/node
     environment:
+      - APP_REPO=bhartisandip/mep-jobs
+      - APP_REF=a17e3e3c870149e2e2a71b8a2942ae881bb1d7ef
       - API_KEY=${API_KEY}
       - PORT=3000
-      - DB_PATH=/data/jobs.db
-      - BACKUP_DIR=/backups
+      - DB_PATH=/home/node/data/jobs.db
+      - BACKUP_DIR=/home/node/backups
       - BACKUP_KEEP_DAYS=14
       - EXPIRY_DAYS=7
       - LINKEDIN_DELAY_MS=4000
@@ -27,9 +32,30 @@ services:
       - RATE_LIMIT_PER_MIN=60
       - TRUST_PROXY=1
       - TZ=Asia/Kolkata
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        APP=/home/node/app-$$APP_REF
+        if [ ! -f "$$APP/.ok" ]; then
+          echo "downloading $$APP_REPO@$$APP_REF"
+          rm -rf "$$APP.tmp" && mkdir -p "$$APP.tmp"
+          wget -qO- "https://codeload.github.com/$$APP_REPO/tar.gz/$$APP_REF" | tar xz -C "$$APP.tmp" --strip-components=1
+          touch "$$APP.tmp/.ok"
+          rm -rf "$$APP" && mv "$$APP.tmp" "$$APP"
+        fi
+        cd "$$APP/service"
+        exec node --disable-warning=ExperimentalWarning src/index.js
     volumes:
-      - mep_jobs_data:/data
-      - mep_jobs_backups:/backups
+      # /home/node is owned by the node user in the image; Docker copies that ownership into the new volume.
+      - mep_jobs_home:/home/node
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 60s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     mem_limit: 160m
     cpus: 0.5
     logging:
@@ -49,8 +75,7 @@ services:
       - traefik.http.services.mepjobs.loadbalancer.server.port=3000
 
 volumes:
-  mep_jobs_data:
-  mep_jobs_backups:
+  mep_jobs_home:
 
 networks:
   n8n_default:
