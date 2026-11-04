@@ -1,0 +1,16 @@
+{
+  "name": "mep-jobs-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Collects public LinkedIn job listings for MEP/BIM roles, deduplicates them in SQLite and serves them to n8n.",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/index.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/"
+  },
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,57 @@
+# Hostinger Docker Manager project "mep-jobs".
+# Builds straight from the public GitHub repo (no secrets in the repo).
+# Secrets come from the project's environment (API_KEY), set in Hostinger, never committed.
+#
+# Joins the existing n8n_default network (like the waha and tmd-media projects), so:
+#   - n8n calls it internally at http://mep-jobs-api:3000
+#   - the existing Traefik serves it at https://jobs.srv2053249.hstgr.cloud (wildcard DNS already resolves)
+# Nothing in the n8n project, Traefik config, DNS or firewall changes.
+
+services:
+  mep-jobs-api:
+    build:
+      context: https://github.com/REPLACE_OWNER/REPLACE_REPO.git#main:service
+    image: mep-jobs-api:latest
+    container_name: mep-jobs-api
+    restart: always
+    environment:
+      - API_KEY=${API_KEY}
+      - PORT=3000
+      - DB_PATH=/data/jobs.db
+      - BACKUP_DIR=/backups
+      - BACKUP_KEEP_DAYS=14
+      - EXPIRY_DAYS=7
+      - LINKEDIN_DELAY_MS=4000
+      - LINKEDIN_TIMEOUT_MS=20000
+      - MAX_PAGES_PER_SEARCH=3
+      - RATE_LIMIT_PER_MIN=60
+      - TRUST_PROXY=1
+      - TZ=Asia/Kolkata
+    volumes:
+      - mep_jobs_data:/data
+      - mep_jobs_backups:/backups
+    mem_limit: 160m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - n8n_default
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=n8n_default
+      - traefik.http.routers.mepjobs.rule=Host(`jobs.srv2053249.hstgr.cloud`)
+      - traefik.http.routers.mepjobs.entrypoints=websecure
+      - traefik.http.routers.mepjobs.tls=true
+      - traefik.http.routers.mepjobs.tls.certresolver=mytlschallenge
+      - traefik.http.services.mepjobs.loadbalancer.server.port=3000
+
+volumes:
+  mep_jobs_data:
+  mep_jobs_backups:
+
+networks:
+  n8n_default:
+    external: true

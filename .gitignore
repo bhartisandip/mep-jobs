@@ -1,0 +1,7 @@
+﻿# Internal reports mention infrastructure details; keep them out of the public repo
+docs/internal/
+node_modules/
+*.db
+*.db-*
+.env
+backups/
